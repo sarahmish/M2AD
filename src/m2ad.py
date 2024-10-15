@@ -21,7 +21,7 @@ LOGGER = logging.Logger(__file__)
 
 class M2AD:
     def __init__(self, dataset, entity, sensors=None, covariates=None, time_column='time', 
-                 feature_range=(-1, 1), strategy='mean', error_name='point',
+                 feature_range=(0, 1), strategy='mean', error_name='point',
                  window_size=100, target_size=1, step_size=1, lstm_units=80, n_layer=2, 
                  dropout=0.2, device='cpu', batch_size=32, lr=1e-3, epochs=35, score_window=10, 
                  verbose=True, n_components=1, covariance_type='spherical', **kwargs):
@@ -49,7 +49,7 @@ class M2AD:
         )
 
         self.error_name = error_name
-        self.pval_thresh  = 0.001
+        self.gamma_thresh  = 0.001
 
         self.epochs = epochs
         self.score_window = score_window
@@ -60,7 +60,6 @@ class M2AD:
     def _get_data(self, df):
         data = df.copy()
         timestamp = data.pop(self.time_column)
-        # timestamp = pd.to_datetime(timestamp)
 
         if self.covariates:
             X = data[self.sensors]
@@ -105,22 +104,22 @@ class M2AD:
         
         pred = self.model.predict(windows)
         pred = pred.reshape(targets.shape)
-        # print(pred.shape)
-
+        
         errors = self._compute_error(targets, pred)
-        self.train_errors = errors
-        self.train_targets = targets
-        self.train_pred = pred
 
         self.gmm_model = GMM(sensors=self.sensors, 
                              n_components=self.n_components, 
                              covariance_type=self.covariance_type)
 
         self.gmm_model.fit(errors)
-        gamma, pval, fisher, _ = self.gmm_model.p_values(errors)
+        anomalyscore, pval, fisher, _ = self.gmm_model.p_values(errors)
         self.threshold = np.percentile(fisher, 99.5)
 
         self.train_mse = mean_squared_error(targets, pred)
+        self.train_errors = errors
+        self.train_targets = targets
+        self.train_pred = pred
+        self.train_anomalyscore = anomalyscore
                 
 
     def detect(self, df, debug=False):
@@ -139,8 +138,8 @@ class M2AD:
         errors = self._compute_error(targets, pred)
 
         LOGGER.info(f'Applying threshold on p-values.')
-        gamma_pval, pval, fisher, fisher_values = self.gmm_model.p_values(errors)
-        anomalies = pd.Series(indices[gamma_pval < self.pval_thresh])
+        anomalyscore, pval, fisher, fisher_values = self.gmm_model.p_values(errors)
+        anomalies = pd.Series(indices[anomalyscore < self.gamma_thresh])
 
         anomalies = pd.DataFrame({
             "dataset": [self.dataset] * len(anomalies),
@@ -154,10 +153,12 @@ class M2AD:
                 "test_targets": targets,
                 "test_pred": pred,
                 "test_errors": errors,
+                "test_anomaly_score": anomalyscore,
                 "test_timestamps": indices,
                 "train_targets": self.train_targets,
                 "train_pred": self.train_pred,
                 "train_errors": self.train_errors,
+                "train_anomaly_score": self.train_anomalyscore,
             }
             
             return anomalies, visuals

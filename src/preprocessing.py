@@ -1,29 +1,6 @@
 import numpy as np
 
 def sliding_window_sequences(X, index, y=None, window_size=100, step_size=1, target_size=1):
-    """Generate sliding windows from given input.
-
-    Args:
-        X (ndarray):
-            2-d array of input sequences.
-        index (array):
-            List of index values of the input sequence, typically timestamps.
-        y (ndarray):
-            2-d array of target sequences. If not given, use `X`.
-        window_size (int):
-            Size of the window. Default `100`.
-        step_size (int):
-            Stride size. Default `1`.
-        target_size (int):
-            Size of the prediction horizon. Default `1`.
-    
-    Returns:
-        ndarray, ndarray:
-            * 3-d array of input sequences.
-            * 2-d array of target sequences.
-            * 1-d array of index values of the first target.
-    """
-    # TODO: make this function generalizable for long horizon.
     if y is None:
         y = X.copy()
 

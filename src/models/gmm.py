@@ -111,6 +111,8 @@ class GMM:
 
         else:
             LOGGER.warning(f'No variance found between p-values ({np.var(combined)}).')
+            self.g_scale = 1
+            self.g_shape = 0
 
 
     def p_values(self, X):

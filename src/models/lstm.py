@@ -77,7 +77,7 @@ class LSTM:
         self.n_channels = None
 
     
-    def fit(self, X, y, validation_split=0.2, epochs=35, tolerance=5, min_delta=10, checkpoint=5, path='checkpoint'):
+    def fit(self, X, y, validation_split=0.2, epochs=35, tolerance=5, min_delta=10, checkpoint=50, path='checkpoint'):
         validation_size = int(len(X) * validation_split)
         train, train_y = torch.Tensor(X[:-validation_size]), torch.Tensor(y[:-validation_size])
         valid, valid_y = torch.Tensor(X[-validation_size:]), torch.Tensor(y[-validation_size:])
@@ -114,6 +114,7 @@ class LSTM:
             for (x, y) in train_loader:
                 optimizer.zero_grad()
                 x = x.to(self.device)
+                y = y.to(self.device)
                 pred = self.model(x)
                 loss = criterion(pred, y)
                 loss.backward()
@@ -124,6 +125,7 @@ class LSTM:
             
             for i, (x, y) in enumerate(valid_loader):
                 x = x.to(self.device)
+                y = y.to(self.device)
                 pred = self.model(x)
                 loss = criterion(pred, y)
                 valid_losses.append(loss.item())
@@ -157,7 +159,7 @@ class LSTM:
         for x in test_loader:
             x = x.to(self.device)
             pred = self.model(x)
-            pred = pred.squeeze().detach().numpy()
+            pred = pred.squeeze().to('cpu').detach().numpy()
             output.append(pred)
 
         return np.array(output)
