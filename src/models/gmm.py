@@ -41,8 +41,11 @@ def _compute_cdf(gmm, x):
     
     return cdf
 
-def _combine_pval(cdf, mode='train'):
-    p_val = 2 * np.array(list(map(np.min, zip(1-cdf, cdf))))
+def _combine_pval(cdf, side=True):
+    if side:
+        p_val = 1 - cdf
+    else:
+        p_val = 2 * np.array(list(map(np.min, zip(1-cdf, cdf))))
 
     p_val[p_val < 1e-16] = 1e-16
 
@@ -74,10 +77,11 @@ class GMM:
         return n_components
     
 
-    def __init__(self, sensors, n_components=1, covariance_type='spherical', weights=None):
+    def __init__(self, sensors, n_components=1, covariance_type='spherical', one_sided=False, weights=None):
         self.sensors = sensors
         self.n_components = self._parse_components(n_components, sensors)
         self.covariance_type = covariance_type
+        self.one_sided = one_sided
 
         self.gmm = [None] * len(self.sensors)
         self.compute_cdf = np.vectorize(_compute_cdf)
@@ -101,7 +105,7 @@ class GMM:
             self.gmm[i] = gmm
 
             cdf = self.compute_cdf(gmm, x.flatten())
-            fisher, p_val = _combine_pval(cdf)
+            fisher, p_val = _combine_pval(cdf, self.one_sided)
 
             combined += self.weights[i] * fisher
 
@@ -124,7 +128,7 @@ class GMM:
             gmm = self.gmm[i]
             cdf = self.compute_cdf(gmm, y)
             
-            fisher, p_val = _combine_pval(cdf)
+            fisher, p_val = _combine_pval(cdf, self.one_sided)
             combined += self.weights[i] * fisher
 
             p_val_sensors[:, i] = p_val

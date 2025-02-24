@@ -1,8 +1,10 @@
 # M2AD
 Unsupervised Anomaly Detection for Heterogeneous Multivariate Time Series Data from Multiple Systems.
 
+This is a code repository for the papar "M2AD: Detecting Anomalies in Heterogeneous Multivariate Time Series from Multiple Systems" that will appear in AISTATS 2025.
+
 ## Quickstart
-It is recommended to create a new environment using python 3.8, 3.9, 3.10, or 3.11 to install the package.
+It is recommended to create a new environment using python 3.10 or 3.11 to install the package.
 
 ```
 pip install -r requirements.txt
@@ -202,8 +204,18 @@ anomalies = model.detect(test)
 
 ```bash
 >>> anomalies
-    dataset  entity       start          end
-0      SMAP     S-1  1399356000   1404540000
+    dataset  entity       start          end    score
+0      SMAP     S-1  1399356000   1404540000    0.045
 ```
 
 The result will show the timestamps where the model detected the observation to be anomalous.
+
+## Citation
+```
+@inproceedings{m2ad,
+  title={M2AD: Detecting Anomalies in Heterogeneous Multivariate Time Series from Multiple Systems},
+  author={Alnegheimish, Sarah and He, Zelin and Reimherr, Matthew and Chandrayan, Akash and Pradhan, Abhinav and D'Angelo, Luca},
+  booktitle={International Conference on Artificial Intelligence and Statistics (AISTATS)},
+  year={2025}
+}
+```

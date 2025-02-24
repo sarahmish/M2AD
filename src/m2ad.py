@@ -4,6 +4,8 @@
 import os
 import logging
 import pickle
+import operator
+from itertools import compress
 
 import numpy as np
 import pandas as pd
@@ -18,6 +20,29 @@ from .models.gmm import GMM
 from .errors import area_errors, point_errors
 
 LOGGER = logging.Logger(__file__)
+
+
+def _merge_sequences(sequences):
+    if len(sequences) == 0:
+        return np.array([])
+
+    sorted_sequences = sorted(sequences, key=operator.itemgetter(0))
+    new_sequences = [sorted_sequences[0]]
+    score = [sorted_sequences[0][2]]
+
+    for sequence in sorted_sequences[1:]:
+        prev_sequence = new_sequences[-1]
+
+        if sequence[0] <= prev_sequence[1] + 1:
+            score.append(sequence[2])
+            average = np.mean(score)
+            new_sequences[-1] = (prev_sequence[0], max(prev_sequence[1], sequence[1]), average)
+        else:
+            score = [sequence[2]]
+            new_sequences.append(sequence)
+
+    return np.array(new_sequences)
+
 
 class M2AD:
     def __init__(self, dataset, entity, sensors=None, covariates=None, time_column='time', 
@@ -57,6 +82,13 @@ class M2AD:
         self.n_components = n_components
         self.covariance_type = covariance_type
 
+        if self.error_name == 'point':
+            self.one_sided = True
+        elif self.error_name == 'area':
+            self.one_sided = False
+        else:
+            raise ValueError(f"Unknown error function {self.error_name}.")
+
     def _get_data(self, df):
         data = df.copy()
         timestamp = data.pop(self.time_column)
@@ -81,6 +113,25 @@ class M2AD:
             return area_errors(y, pred, smooth=True)
         
         raise ValueError(f"Unknown error function {self.error_name}.")
+
+    def create_intervals(self, anomalies, index, score, anomaly_padding=50):
+        intervals = list()
+        length = len(anomalies)
+        anomalies_index = list(compress(range(length), anomalies))
+        for idx in anomalies_index:
+            start = max(0, idx - anomaly_padding)
+            end = min(idx + anomaly_padding + 1, length)
+            value = np.mean(score[start: end])
+            intervals.append([index[start], index[end], value])
+        
+        intervals = _merge_sequences(intervals)
+        intervals = sorted(intervals, key=operator.itemgetter(0), reverse=True)
+
+        anomalies = pd.DataFrame(intervals, columns=['start', 'end', 'score'])
+        anomalies.insert(0, 'dataset', self.dataset)
+        anomalies.insert(1, 'entity', self.entity)
+
+        return anomalies
 
     def fit(self, df, validation_split=0.2, tolerance=10, min_delta=10):
         X, y, cov, timestamp = self._get_data(df)
@@ -109,7 +160,8 @@ class M2AD:
 
         self.gmm_model = GMM(sensors=self.sensors, 
                              n_components=self.n_components, 
-                             covariance_type=self.covariance_type)
+                             covariance_type=self.covariance_type,
+                             one_sided=self.one_sided)
 
         self.gmm_model.fit(errors)
         anomalyscore, pval, fisher, _ = self.gmm_model.p_values(errors)
@@ -119,6 +171,7 @@ class M2AD:
         self.train_errors = errors
         self.train_targets = targets
         self.train_pred = pred
+        self.train_pvals = pval
         self.train_anomalyscore = anomalyscore
                 
 
@@ -139,13 +192,8 @@ class M2AD:
 
         LOGGER.info(f'Applying threshold on p-values.')
         anomalyscore, pval, fisher, fisher_values = self.gmm_model.p_values(errors)
-        anomalies = pd.Series(indices[anomalyscore < self.gamma_thresh])
-
-        anomalies = pd.DataFrame({
-            "dataset": [self.dataset] * len(anomalies),
-            "entity": [self.entity] * len(anomalies),
-            "anomaly": anomalies
-        })
+        anomalies = anomalyscore < self.gamma_thresh
+        formatted_anomalies = self.create_intervals(anomalies, indices, anomalyscore)
 
         if debug:
             visuals = {
@@ -153,14 +201,16 @@ class M2AD:
                 "test_targets": targets,
                 "test_pred": pred,
                 "test_errors": errors,
+                "test_pvals": pval,
                 "test_anomaly_score": anomalyscore,
                 "test_timestamps": indices,
                 "train_targets": self.train_targets,
                 "train_pred": self.train_pred,
                 "train_errors": self.train_errors,
+                "train_pvals": self.train_pvals,
                 "train_anomaly_score": self.train_anomalyscore,
             }
             
-            return anomalies, visuals
+            return formatted_anomalies, visuals
 
-        return anomalies
+        return formatted_anomalies
